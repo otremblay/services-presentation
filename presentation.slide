@@ -1,0 +1,178 @@
+Services in Go
+net/http is really awesome
+22 Feb 2016
+Tags: http, services, api
+
+Olivier Tremblay
+Developer, Lightspeed POS
+himself@otremblay.com
+http://otremblay.com/
+http://github.com/otremblay/
+@otremblaydev
+
+* Who am I? (The Relevant Parts)
+
+- Written go professionally for three years
+- For my own nefarious purposes for even longer
+- Advocating its use since 1.0
+- I really really like reading source code. Really.
+
+* Plan for this presentation
+
+- Exploration of net/http (there shall be source!)
+- Packages that work well with net/http
+- Putting (some of) it all together!
+
+* net/http
+
+* net/http, server-side
+
+- http.ListenAndServe
+- http.Handler
+- List of stuff you get for free (SOUUUUURCE!!! :D)
+
+* ListenAndServe
+
+    func ListenAndServe(addr string, handler Handler) error
+     
+    ListenAndServe listens on the TCP network address addr and then calls
+    Serve with handler to handle requests on incoming connections. Handler
+    is typically nil, in which case the DefaultServeMux is used.
+
+
+* http.Handler
+
+    type Handler interface {
+        ServeHTTP(ResponseWriter, *Request)
+    }
+    
+    Objects implementing the Handler interface can be registered to serve a
+    particular path or subtree in the HTTP server.
+
+\... and its glorious sidekick, http.HandlerFunc!
+
+    type HandlerFunc func(ResponseWriter, *Request)
+    
+    The HandlerFunc type is an adapter to allow the use of ordinary
+    functions as HTTP handlers. If f is a function with the appropriate
+    signature, HandlerFunc(f) is a Handler object that calls f.
+
+	
+    func (f HandlerFunc) ServeHTTP(w ResponseWriter, r *Request)
+    
+    ServeHTTP calls f(w, r).
+
+* Upgrading ResponseWriter
+
+    type Hijacker interface {
+        Hijack() (net.Conn, *bufio.ReadWriter, error)
+    }
+    The Hijacker interface is implemented by ResponseWriters that allow an
+    HTTP handler to take over the connection.
+ 
+    type Flusher interface {
+        Flush()
+    }
+    The Flusher interface is implemented by ResponseWriters that allow an
+    HTTP handler to flush buffered data to the client.
+ 
+    type CloseNotifier interface {
+        CloseNotify() <-chan bool
+    }
+    The CloseNotifier interface is implemented by ResponseWriters which
+    allow detecting when the underlying connection has gone away.
+
+
+* Stuff you get for free with net/http
+
+* For the server side
+
+- Concurrent requests
+- Super-efficient file-sending (at least on unix systems)
+- HTTP/2
+- Diverse http utilities, including http testing tools
+- Profiling!
+
+For the client side
+
+- Pretty solid http client (with cookie support)
+- OAuth2 + JWT support for client (in the sub-repos)
+
+* Concurrent requests
+
+In net/http/server.go:
+
+.code nethttp.go /^func/,/^}/
+
+* Super-efficient file-sending
+
+In net/http/server.go:
+
+     414	// ReadFrom is here to optimize copying from an *os.File regular file
+     415	// to a *net.TCPConn with sendfile.
+     416	func (w *response) ReadFrom(src io.Reader) (n int64, err error) {
+
+* Sendfile?
+
+    otremblay@zeromus:~/programs/go/src/net% whatis sendfile
+    sendfile (2)         - transfer data between file descriptors
+
+man 2 sendfile:
+
+    sendfile()  copies  data  between  one  file  descriptor and another.  Because this
+    copying is done within the kernel, sendfile() is more efficient than the combination
+    of read(2) and write(2), which would require transferring data to and from user space.
+
+Caveat Emptor:
+
+This totally doesn't work with SSL....
+
+* But Netflix really needs sendfile.
+
+.image in-kernel-web-serving-75.png
+
+* HTTP/2
+
+Starting from Go 1.6, enabled by default! For free!
+
+Request multiplexing, preemptive asset-pushing, header compression, all for the low low price of free!
+
+* HTTP Utilities
+
+net/http/httputil
+
+- Contains tools to dump requests and responses
+- Has a reverse proxy
+- Don't use the rest, as the documentation says it is old and deprecated.
+
+net/http/httptest
+
+- Contains utilities to test HTTP servers, complete with a response recorder.
+
+* Profiling!
+
+* net/http/pprof
+
+.play pprof.go
+
+* Packages that work well with net/http
+
+* Packages that work well with net/http
+
+- OAuth2 -> [[https://golang.org/x/oauth2]]
+- Server-side JWT -> [[https://github.com/dgrijalva/jwt-go]]
+- Client-side JWT -> [[https://golang.org/x/oauth2/jwt]]
+- Graceful restarts -> [[https://github.com/facebookgo/grace/gracehttp]]
+- Minimalist Middleware -> [[https://github.com/carbocation/interpose]]
+
+* OAuth2!
+
+.code oauth.go /ROOT BEGIN OMIT/,/ROOT END OMIT/
+
+* OAuth2 dance!
+
+.code oauth.go /func oauthDance/,/^}/
+
+Callback
+
+.code oauth.go /"\/callback"/,/ROOT BEGIN OMIT/
